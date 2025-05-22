@@ -1,0 +1,63 @@
+model:
+  backbone: 'resnet50'
+  feat_dim: 512
+  input_size: 224
+  num_heads: 8
+  dropout: 0.1
+
+training:
+  batch_size: 32
+  learning_rate: 3e-4
+  weight_decay: 1e-4
+  epochs: 20
+  warmup_epochs: 2
+  freeze_backbone_epochs: 1
+  
+  # Loss weights
+  contrastive_weight: 1.0
+  twin_margin_weight: 1.0
+  difference_head_weight: 0.5
+  
+  # Margins
+  twin_margin: 0.5
+  other_margin: 0.3
+  
+  # Mining strategy
+  hard_twin_ratio: 0.5
+  easy_twin_ratio: 0.25
+  other_ratio: 0.25
+
+data:
+  dataset_path: 'dataset'
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  num_workers: 4
+  pin_memory: true
+  
+  # Augmentation
+  color_jitter: 0.4
+  cutmix_alpha: 1.0
+  cutmix_prob: 0.5
+  horizontal_flip: false  # Important: NO flipping for twins
+
+optimization:
+  optimizer: 'adamw'
+  scheduler: 'cosine'
+  min_lr: 1e-6
+  gradient_clip: 1.0
+  mixed_precision: true
+  gradient_checkpointing: true
+
+logging:
+  log_interval: 100
+  save_interval: 1000
+  checkpoint_dir: 'checkpoints'
+  log_dir: 'logs'
+  use_wandb: false
+  wandb_project: 'twin-face-verification'
+
+inference:
+  high_res_size: 640
+  top_k_rerank: 10
+  distance_metric: 'cosine'  # 'cosine' or 'l2'
