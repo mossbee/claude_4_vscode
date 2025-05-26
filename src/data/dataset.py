@@ -1,6 +1,6 @@
 """
 Dataset classes for twin face verification.
-Handles the twin dataset structure and generates appropriate pairs.
+Handles the twin dataset structure with pairs.json file.
 """
 
 import os
@@ -27,6 +27,7 @@ class TwinFaceDataset(Dataset):
     
     def __init__(self, 
                  dataset_path,
+                 pairs_json_path=None,
                  split='train',
                  transform=None,
                  pair_sampling_strategy='balanced',
@@ -35,7 +36,8 @@ class TwinFaceDataset(Dataset):
                  other_ratio=0.25):
         """
         Args:
-            dataset_path: Path to dataset with twin_X_a, twin_X_b structure
+            dataset_path: Path to dataset with img_folder_1, img_folder_2, etc.
+            pairs_json_path: Path to pairs.json file containing twin pairs
             split: 'train', 'val', or 'test'
             transform: Image transformations
             pair_sampling_strategy: How to sample pairs ('balanced', 'hard', 'easy')
@@ -44,6 +46,7 @@ class TwinFaceDataset(Dataset):
             other_ratio: Ratio of other person pairs
         """
         self.dataset_path = dataset_path
+        self.pairs_json_path = pairs_json_path or os.path.join(dataset_path, 'pairs.json')
         self.split = split
         self.transform = transform
         self.pair_sampling_strategy = pair_sampling_strategy
@@ -61,43 +64,51 @@ class TwinFaceDataset(Dataset):
         self.regenerate_pairs()
     
     def _load_dataset_structure(self):
-        """Load the dataset structure and identify twin pairs."""
+        """Load the dataset structure and identify twin pairs from pairs.json."""
         self.twin_pairs = []
         self.identity_images = defaultdict(list)
         
-        # Scan dataset directory
+        # Load twin pairs from JSON file
+        if os.path.exists(self.pairs_json_path):
+            with open(self.pairs_json_path, 'r') as f:
+                twin_pairs_data = json.load(f)
+            
+            # Convert to list of tuples
+            self.twin_pairs = [tuple(pair) for pair in twin_pairs_data]
+            print(f"Loaded {len(self.twin_pairs)} twin pairs from {self.pairs_json_path}")
+        else:
+            print(f"Warning: pairs.json not found at {self.pairs_json_path}")
+            self.twin_pairs = []
+        
+        # Scan dataset directory and collect images for each folder
         for folder_name in os.listdir(self.dataset_path):
             folder_path = os.path.join(self.dataset_path, folder_name)
             if not os.path.isdir(folder_path):
                 continue
             
-            # Parse folder name to identify twins
-            if '_' in folder_name:
-                base_name = '_'.join(folder_name.split('_')[:-1])
-                twin_id = folder_name.split('_')[-1]
-                
-                # Collect images for this identity
-                images = []
-                for img_file in os.listdir(folder_path):
-                    if img_file.lower().endswith(('.jpg', '.jpeg', '.png')):
-                        img_path = os.path.join(folder_path, img_file)
-                        images.append(img_path)
-                
-                if images:
-                    identity_key = f"{base_name}_{twin_id}"
-                    self.identity_images[identity_key] = images
-                    
-                    # Check if twin pair exists
-                    twin_a_key = f"{base_name}_a"
-                    twin_b_key = f"{base_name}_b"
-                    
-                    if (twin_a_key in self.identity_images and 
-                        twin_b_key in self.identity_images):
-                        if (twin_a_key, twin_b_key) not in self.twin_pairs:
-                            self.twin_pairs.append((twin_a_key, twin_b_key))
+            # Collect images for this identity
+            images = []
+            for img_file in os.listdir(folder_path):
+                if img_file.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.tiff')):
+                    img_path = os.path.join(folder_path, img_file)
+                    images.append(img_path)
+            
+            if images:
+                self.identity_images[folder_name] = images
         
-        print(f"Found {len(self.twin_pairs)} twin pairs")
-        print(f"Found {len(self.identity_images)} identities")
+        # Verify that all twin pairs exist in the dataset
+        valid_twin_pairs = []
+        for pair in self.twin_pairs:
+            folder1, folder2 = pair
+            if folder1 in self.identity_images and folder2 in self.identity_images:
+                valid_twin_pairs.append(pair)
+            else:
+                print(f"Warning: Twin pair {pair} not found in dataset")
+        
+        self.twin_pairs = valid_twin_pairs
+        
+        print(f"Found {len(self.twin_pairs)} valid twin pairs")
+        print(f"Found {len(self.identity_images)} identity folders")
     
     def _create_split(self):
         """Create train/val/test splits."""
