@@ -1,34 +1,43 @@
 model:
   backbone: 'resnet50'
-  feat_dim: 512
+  embedding_dim: 512  # Changed from feat_dim
   input_size: 224
-  num_heads: 8
+  attention_type: 'cbam'  # Added for attention mechanism
   dropout: 0.1
+  pretrained: true  # Added for backbone loading
 
 training:
   batch_size: 32
-  learning_rate: 3e-4
-  weight_decay: 1e-4
   epochs: 20
   warmup_epochs: 2
   freeze_backbone_epochs: 1
   
-  # Loss weights
-  contrastive_weight: 1.0
-  twin_margin_weight: 1.0
-  difference_head_weight: 0.5
+  # Optimizer config structure
+  optimizer:
+    type: 'adam'  # Changed from 'adamw' to match trainer expectations
+    lr: 3e-4
+    weight_decay: 1e-4
   
-  # Margins
-  twin_margin: 0.5
-  other_margin: 0.3
+  # Scheduler config structure  
+  scheduler:
+    type: 'cosine'
+    min_lr: 1e-6
+  
+  # Loss configuration structure
+  loss:
+    type: 'combined'
+    margin: 1.0
+    twin_weight: 2.0
+    same_weight: 1.0
+    other_weight: 1.0
   
   # Mining strategy
   hard_twin_ratio: 0.5
-  easy_twin_ratio: 0.25
   other_ratio: 0.25
 
 data:
   dataset_path: 'dataset'
+  pairs_json_path: 'dataset/pairs.json'  # Added pairs.json path
   train_split: 0.8
   val_split: 0.1
   test_split: 0.1
@@ -36,18 +45,16 @@ data:
   pin_memory: true
   
   # Augmentation
+  input_size: 224  # Moved from model section for consistency
   color_jitter: 0.4
   cutmix_alpha: 1.0
   cutmix_prob: 0.5
   horizontal_flip: false  # Important: NO flipping for twins
 
-optimization:
-  optimizer: 'adamw'
-  scheduler: 'cosine'
-  min_lr: 1e-6
-  gradient_clip: 1.0
-  mixed_precision: true
-  gradient_checkpointing: true
+# Renamed from optimization to match trainer expectations
+mixed_precision: true
+gradient_checkpointing: true
+gradient_clip: 1.0
 
 logging:
   log_interval: 100

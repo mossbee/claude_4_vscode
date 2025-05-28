@@ -26,35 +26,20 @@ class TwinVerificationTrainer:
     Handles training loop, validation, checkpointing, and logging.
     """
     
-    def __init__(self, config, model=None, device=None):
+    def __init__(self, model, train_loader, val_loader, optimizer, scheduler, loss_fn, device, config, save_dir, use_wandb=False):
+        self.model = model
+        self.train_loader = train_loader
+        self.val_loader = val_loader
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.loss_fn = loss_fn
+        self.device = device
         self.config = config
-        self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        
-        # Initialize model
-        if model is None:
-            self.model = TwinVerifier(
-                backbone=config['model']['backbone'],
-                feat_dim=config['model']['feat_dim'],
-                num_heads=config['model']['num_heads'],
-                dropout=config['model']['dropout'],
-                use_gradient_checkpointing=config['optimization']['gradient_checkpointing']
-            )
-        else:
-            self.model = model
-        
-        self.model.to(self.device)
-        
-        # Initialize loss function
-        self._setup_loss_function()
-        
-        # Initialize optimizer and scheduler
-        self._setup_optimizer()
-        
-        # Initialize hard negative mining
-        self._setup_mining()
+        self.save_dir = save_dir
+        self.use_wandb = use_wandb
         
         # Mixed precision training
-        if config['optimization']['mixed_precision']:
+        if config.get('mixed_precision', True):
             self.scaler = GradScaler()
         else:
             self.scaler = None
@@ -72,98 +57,30 @@ class TwinVerificationTrainer:
             'val_auc': [],
             'twin_auc': []
         }
-    
-    def _setup_loss_function(self):
-        """Setup loss function based on config."""
-        self.criterion = CombinedLoss(
-            twin_margin=self.config['training']['twin_margin'],
-            other_margin=self.config['training']['other_margin'],
-            margin_weight=self.config['training']['twin_margin_weight'],
-            classification_weight=self.config['training']['difference_head_weight'],
-            use_focal_loss=True
-        )
-        
-        # Optional adaptive margin
-        if self.config.get('adaptive_margin', False):
-            self.adaptive_criterion = AdaptiveMarginLoss(
-                initial_twin_margin=0.3,
-                final_twin_margin=self.config['training']['twin_margin'],
-                warmup_epochs=self.config['training']['warmup_epochs']
-            )
-    
-    def _setup_optimizer(self):
-        """Setup optimizer and learning rate scheduler."""
-        # Optimizer
-        if self.config['optimization']['optimizer'] == 'adamw':
-            self.optimizer = optim.AdamW(
-                self.model.parameters(),
-                lr=self.config['training']['learning_rate'],
-                weight_decay=self.config['training']['weight_decay']
-            )
-        elif self.config['optimization']['optimizer'] == 'sgd':
-            self.optimizer = optim.SGD(
-                self.model.parameters(),
-                lr=self.config['training']['learning_rate'],
-                momentum=0.9,
-                weight_decay=self.config['training']['weight_decay']
-            )
-        
-        # Learning rate scheduler
-        if self.config['optimization']['scheduler'] == 'cosine':
-            self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
-                self.optimizer,
-                T_max=self.config['training']['epochs'],
-                eta_min=self.config['optimization']['min_lr']
-            )
-        elif self.config['optimization']['scheduler'] == 'step':
-            self.scheduler = optim.lr_scheduler.StepLR(
-                self.optimizer,
-                step_size=self.config['training']['epochs'] // 3,
-                gamma=0.1
-            )
-    
-    def _setup_mining(self):
-        """Setup hard negative mining strategies."""
-        self.twin_miner = TwinHardNegativeMiner(
-            hard_ratio=self.config['training']['hard_twin_ratio'],
-            update_frequency=1000
-        )
-        
-        self.batch_miner = BatchHardNegativeMiner(margin=0.5)
-        
-        self.curriculum_miner = CurriculumMiner(
-            easy_epochs=2,
-            medium_epochs=self.config['training']['warmup_epochs'],
-            hard_epochs=self.config['training']['epochs']
-        )
-    
+      
     def _setup_logging(self):
         """Setup logging and tensorboard."""
         # Create directories
-        os.makedirs(self.config['logging']['checkpoint_dir'], exist_ok=True)
-        os.makedirs(self.config['logging']['log_dir'], exist_ok=True)
+        os.makedirs(self.save_dir, exist_ok=True)
         
         # Setup logging
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
             handlers=[
-                logging.FileHandler(os.path.join(self.config['logging']['log_dir'], 'train.log')),
+                logging.FileHandler(os.path.join(self.save_dir, 'train.log')),
                 logging.StreamHandler()
             ]
         )
         self.logger = logging.getLogger(__name__)
         
         # Tensorboard
-        self.writer = SummaryWriter(log_dir=self.config['logging']['log_dir'])
+        self.writer = SummaryWriter(log_dir=os.path.join(self.save_dir, 'logs'))
         
         # Wandb (optional)
-        if self.config['logging']['use_wandb']:
+        if self.use_wandb:
             import wandb
-            wandb.init(
-                project=self.config['logging']['wandb_project'],
-                config=self.config
-            )
+            self.logger.info("Using Weights & Biases for logging")
     
     def train_epoch(self, train_loader):
         """Train for one epoch."""

@@ -78,10 +78,9 @@ def create_model(config, device):
     
     model = TwinVerifier(
         backbone=model_config['backbone'],
-        embedding_dim=model_config['embedding_dim'],
-        attention_type=model_config.get('attention_type', 'cbam'),
-        dropout=model_config.get('dropout', 0.5),
-        pretrained=model_config.get('pretrained', True)
+        feat_dim=model_config['embedding_dim'],  # Map embedding_dim to feat_dim
+        dropout=model_config.get('dropout', 0.1),
+        use_gradient_checkpointing=config.get('gradient_checkpointing', True)
     )
     
     model = model.to(device)

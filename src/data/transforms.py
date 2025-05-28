@@ -243,7 +243,7 @@ def get_transforms(config):
     Returns:
         train_transform, val_transform
     """
-    input_size = config['model']['input_size']
+    input_size = config['data'].get('input_size', config['model'].get('input_size', 224))
     color_jitter = config['data']['color_jitter']
     
     train_transform = TwinAwareAugmentation(

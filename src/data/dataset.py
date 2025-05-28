@@ -311,10 +311,10 @@ def create_data_loaders(config):
     from .transforms import get_transforms
     
     train_transform, val_transform = get_transforms(config)
-    
-    # Create datasets
+      # Create datasets
     train_dataset = TwinFaceDataset(
         dataset_path=config['data']['dataset_path'],
+        pairs_json_path=config['data'].get('pairs_json_path'),
         split='train',
         transform=train_transform,
         twin_ratio=config['training']['hard_twin_ratio'],
@@ -324,6 +324,7 @@ def create_data_loaders(config):
     
     val_dataset = TwinFaceDataset(
         dataset_path=config['data']['dataset_path'],
+        pairs_json_path=config['data'].get('pairs_json_path'),
         split='val',
         transform=val_transform,
         twin_ratio=0.5,  # Balanced for validation
@@ -333,6 +334,7 @@ def create_data_loaders(config):
     
     test_dataset = TwinFaceDataset(
         dataset_path=config['data']['dataset_path'],
+        pairs_json_path=config['data'].get('pairs_json_path'),
         split='test',
         transform=val_transform,
         twin_ratio=0.5,
